@@ -1,0 +1,74 @@
+{
+  "name": "@kinocode/dsh-mobile",
+  "version": "0.3.3",
+  "description": "DeepSeek Harness host plugin for the DSH Mobile Android app: pair with a QR, use DSH on the phone through its own HTTPS gateway, answer approvals and questions from notifications, push turn completion.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "plugin",
+    "mobile",
+    "android",
+    "push-notifications",
+    "approval",
+    "relay"
+  ],
+  "author": "kinocode",
+  "homepage": "https://github.com/kinocode-jp/dsh-mobile#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kinocode-jp/dsh-mobile.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kinocode-jp/dsh-mobile/issues"
+  },
+  "type": "module",
+  "main": "lib/index.mjs",
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "README.ja.md",
+    "README.zh-CN.md",
+    "SECURITY.md",
+    "cordis.patch.yml",
+    "lib/**/*.mjs",
+    "lib/client.js"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22.4",
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

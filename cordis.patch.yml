@@ -1,0 +1,16 @@
+# @kinocode/dsh-mobile bundle layer. Every field is optional. To enable push and notification
+# actions, add this to your profile's cordis.patch.yml (a profile patch replaces the whole
+# config, so list every field you want to keep):
+#
+#   - id: mobile-bridge
+#     config:
+#       relayUrl: https://dsh-relay.example.com
+#       relayEnrollToken: '...'
+#
+# Other fields: stateDir (default $DSH_HOME/mobile-bridge), gatewayEnabled (default true),
+# gatewayPort (default 3543), gatewayHosts (fixed IPv4 listen addresses instead of auto-detection),
+# hostLabel (default: computer name), previewMaxChars (default 400).
+- insert:
+    - id: mobile-bridge
+      name: '@kinocode/dsh-mobile'
+      config: {}
