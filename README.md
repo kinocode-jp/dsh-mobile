@@ -37,6 +37,8 @@ Restart DSH. The log should show `[mobile-bridge] gateway listening {"origins":[
 
 The panel also lists paired phones and lets you remove them. Removing a phone revokes its access immediately. The panel is currently available only in Japanese.
 
+On the phone, the DSH sidebar is hidden so the conversation gets the full width. The round button at the top left opens it over the conversation; picking a session or tapping outside closes it. Desktop-only buttons are hidden.
+
 ## Configuration
 
 All fields are optional. Add them to your profile's `cordis.patch.yml`. A profile patch replaces the plugin's entire configuration, so include every field you want to keep.
