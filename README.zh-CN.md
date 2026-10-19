@@ -41,6 +41,12 @@ dsh plugin --profile desktop add @kinocode/dsh-mobile
 
 在手机上添加工作区时，会在手机上列出电脑中的文件夹，而不是在电脑上弹出文件夹选择窗口。浏览到文件夹或输入路径后，点击 **このフォルダを使う**（使用此文件夹）。
 
+### 获取和更新应用
+
+Android 应用（DSH Mobile）发布在本仓库的 [Releases](https://github.com/kinocode-jp/dsh-mobile/releases)（`android-v…`）中。
+
+插件知道与其一同发布的应用版本。更新插件后再扫描二维码，应用中会显示 **アップデートがあります**（有可用更新）。点击 **アップデート**（更新）后，应用会下载新版本，校验文件大小、SHA-256 和签名密钥，然后打开 Android 的安装界面（首次需要允许“安装未知应用”）。自行构建的应用使用不同的签名密钥，无法通过这种方式更新；请先卸载一次，再安装 Releases 中的版本。
+
 ## 配置
 
 所有字段均为可选。将它们添加到 profile 的 `cordis.patch.yml` 中。Profile patch 会替换插件的完整配置，因此请包含所有需要保留的字段。

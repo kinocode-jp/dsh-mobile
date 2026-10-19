@@ -41,6 +41,12 @@ On the phone, the DSH sidebar is hidden so the conversation gets the full width.
 
 When you add a workspace on the phone, the computer's folders are listed on the phone instead of opening a folder dialog on the computer. Browse to a folder or type its path, then tap **このフォルダを使う** ("Use this folder").
 
+### Getting and updating the app
+
+The Android app (DSH Mobile) is published in this repository's [Releases](https://github.com/kinocode-jp/dsh-mobile/releases) (`android-v…`).
+
+The plugin knows the app version released with it. After you update the plugin, scanning a QR shows **アップデートがあります** ("Update available") in the app. Tapping **アップデート** ("Update") downloads the new version, checks its size, SHA-256 and signing key, and opens Android's install screen (the first time, Android asks you to allow "Install unknown apps"). A self-built copy of the app is signed with a different key and cannot update this way; uninstall it once and install the release.
+
 ## Configuration
 
 All fields are optional. Add them to your profile's `cordis.patch.yml`. A profile patch replaces the plugin's entire configuration, so include every field you want to keep.
