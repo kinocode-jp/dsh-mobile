@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { desktopRoutes, listDirectories } from '../lib/desktop-api.mjs'
+import { asciiFileName, desktopRoutes, listDirectories } from '../lib/desktop-api.mjs'
 
 test('lists sub-folders only, sorted, hidden ones on request, symlinked folders included', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-mobile-dirs-'))
@@ -36,4 +36,31 @@ test('the directories route refuses relative paths and reports missing folders',
   const home = await call('')
   assert.equal(home.status, 200)
   assert.equal(home.body.path, home.body.home)
+})
+
+test('the file route answers as an uncompressed attachment with an ASCII name and the UTF-8 name apart', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-mobile-file-'))
+  try {
+    const path = join(dir, '資料 v2.txt')
+    await writeFile(path, 'hello')
+    const route = desktopRoutes({ log: () => {} }).find(r => r.path === '/api/dsh-mobile-bridge/file')
+    const response = await route.fetch(new Request(`http://localhost/api/dsh-mobile-bridge/file?path=${encodeURIComponent(path)}`))
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('content-disposition'), 'attachment; filename="__ v2.txt"')
+    assert.equal(decodeURIComponent(response.headers.get('x-dsh-mobile-filename')), '資料 v2.txt')
+    assert.match(response.headers.get('cache-control'), /no-transform/)
+    assert.equal(response.headers.get('content-length'), '5')
+    assert.equal(await response.text(), 'hello')
+    const folder = await route.fetch(new Request(`http://localhost/api/dsh-mobile-bridge/file?path=${encodeURIComponent(dir)}`))
+    assert.equal(folder.status, 404)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('asciiFileName keeps the extension and never returns an empty name', () => {
+  assert.equal(asciiFileName('README.md'), 'README.md')
+  assert.equal(asciiFileName('a"b\\c.txt'), 'a_b_c.txt')
+  assert.equal(asciiFileName('日本語'), '___')
+  assert.equal(asciiFileName('   '), 'download')
 })

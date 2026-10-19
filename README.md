@@ -41,6 +41,10 @@ On the phone, the DSH sidebar is hidden so the conversation gets the full width.
 
 When you add a workspace on the phone, the computer's folders are listed on the phone instead of opening a folder dialog on the computer. Browse to a folder or type its path, then tap **このフォルダを使う** ("Use this folder").
 
+The right sidebar (files, preview, changes review, browser, terminal) opens full screen on the phone. Buttons that open an app or Finder on the computer are hidden on the phone; the file preview offers **スマホに保存** ("Save to phone") instead, which saves to the phone's Downloads. If the page stays blank after DSH restarts, it reloads by itself.
+
+The round buttons at the top left (sidebar) and top right (right sidebar) can be moved anywhere: long-press one, then drag it.
+
 ## Configuration
 
 All fields are optional. Add them to your profile's `cordis.patch.yml`. A profile patch replaces the plugin's entire configuration, so include every field you want to keep.
