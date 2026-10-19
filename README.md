@@ -39,6 +39,8 @@ The panel also lists paired phones and lets you remove them. Removing a phone re
 
 On the phone, the DSH sidebar is hidden so the conversation gets the full width. The round button at the top left opens it over the conversation; picking a session or tapping outside closes it. Desktop-only buttons are hidden.
 
+When you add a workspace on the phone, the computer's folders are listed on the phone instead of opening a folder dialog on the computer. Browse to a folder or type its path, then tap **このフォルダを使う** ("Use this folder").
+
 ## Configuration
 
 All fields are optional. Add them to your profile's `cordis.patch.yml`. A profile patch replaces the plugin's entire configuration, so include every field you want to keep.
