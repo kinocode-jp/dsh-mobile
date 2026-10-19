@@ -10,7 +10,7 @@ import { SessionTracker } from '../lib/sessions.mjs'
 import { StateStore } from '../lib/state.mjs'
 import { WebSessions } from '../lib/web-sessions.mjs'
 
-async function setup() {
+async function setup(options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'mobile-bridge-'))
   const state = await new StateStore(dir).load()
   const codes = new RegistrationCodes()
@@ -40,6 +40,7 @@ async function setup() {
     listSessions: async () => [],
     hostLabel: 'Test Mac',
     version: 'test',
+    appRelease: options.appRelease ?? null,
     previewMaxChars: 400,
     log: () => {},
   })
@@ -132,5 +133,36 @@ test('watch and settings update the device record', async () => {
     assert.equal((await ctx.handle(signedRequest(ctx, deviceId, 'POST', '/v1/watch', { sessionIds: ['bad id with spaces'] }))).status, 400)
   } finally {
     await ctx.cleanup()
+  }
+})
+
+test('the app build is offered in the pair and status answers, and left out when there is none', async () => {
+  const appRelease = {
+    versionCode: 11,
+    versionName: '0.3.2',
+    url: 'https://github.com/kinocode-jp/dsh-mobile/releases/download/android-v0.3.2-11/dsh-mobile-v0.3.2-11.apk',
+    sha256: '0123456789abcdef'.repeat(4),
+    size: 1234,
+  }
+  const ctx = await setup({ appRelease })
+  try {
+    const { code } = ctx.codes.issue('desktop')
+    const paired = await ctx.pair(JSON.stringify({ code, publicKey: ctx.device.publicKey }))
+    assert.equal(paired.status, 200)
+    assert.deepEqual(paired.body.app, appRelease)
+    const status = await ctx.handle(signedRequest(ctx, paired.body.deviceId, 'GET', '/v1/status'))
+    assert.deepEqual(status.body.app, appRelease)
+  } finally {
+    await ctx.cleanup()
+  }
+
+  const without = await setup()
+  try {
+    const deviceId = await register(without)
+    const status = await without.handle(signedRequest(without, deviceId, 'GET', '/v1/status'))
+    assert.equal(status.status, 200)
+    assert.equal('app' in status.body, false)
+  } finally {
+    await without.cleanup()
   }
 })
