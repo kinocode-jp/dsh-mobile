@@ -45,6 +45,8 @@ dsh plugin --profile desktop add @kinocode/dsh-mobile
 
 左上角（侧边栏）和右上角（右侧边栏）的圆形按钮可以长按后拖动到任意位置。
 
+在 DSH 内置浏览器（右侧边栏的“浏览器”）的地址栏输入非网址的文字时会进行搜索：桌面端使用 Google，手机端使用 Bing。手机端只能显示允许被嵌入的页面（Google 等会拒绝），无法显示的页面可以通过 ↗（在系统浏览器中打开）用 Chrome 打开。
+
 ## 配置
 
 所有字段均为可选。将它们添加到 profile 的 `cordis.patch.yml` 中。Profile patch 会替换插件的完整配置，因此请包含所有需要保留的字段。

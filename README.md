@@ -45,6 +45,8 @@ The right sidebar (files, preview, changes review, browser, terminal) opens full
 
 The round buttons at the top left (sidebar) and top right (right sidebar) can be moved anywhere: long-press one, then drag it.
 
+In DSH's built-in browser (the right sidebar's Browser), words that are not an address are searched: Google on the desktop, Bing on the phone. The phone can only show pages that allow being framed (Google and others refuse), so ↗ (Open in system browser) opens the page in Chrome.
+
 ## Configuration
 
 All fields are optional. Add them to your profile's `cordis.patch.yml`. A profile patch replaces the plugin's entire configuration, so include every field you want to keep.
