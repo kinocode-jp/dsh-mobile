@@ -5,12 +5,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { NonceCache, RegistrationCodes, canonicalString } from '../lib/auth.mjs'
+import { APP_RELEASE, usableAppRelease } from '../lib/app-release.mjs'
 import { createControlHandler } from '../lib/control.mjs'
 import { SessionTracker } from '../lib/sessions.mjs'
 import { StateStore } from '../lib/state.mjs'
 import { WebSessions } from '../lib/web-sessions.mjs'
 
-async function setup() {
+async function setup(options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'mobile-bridge-'))
   const state = await new StateStore(dir).load()
   const codes = new RegistrationCodes()
@@ -40,6 +41,7 @@ async function setup() {
     listSessions: async () => [],
     hostLabel: 'Test Mac',
     version: 'test',
+    appRelease: options.appRelease,
     previewMaxChars: 400,
     log: () => {},
   })
@@ -50,7 +52,7 @@ async function setup() {
     await state.close()
     await rm(dir, { recursive: true, force: true })
   }
-  return { dir, state, codes, handle: control.handle, pair: control.pair, webSessions, answers, device, cleanup }
+  return { dir, state, codes, handle: control.handle, pair: control.pair, webSessions, answers, device, cleanup, control }
 }
 
 function signedRequest(ctx, deviceId, method, path, bodyObject) {
@@ -130,6 +132,59 @@ test('watch and settings update the device record', async () => {
     assert.deepEqual(ctx.state.watchers('s1').map(([id]) => id), [deviceId])
     assert.deepEqual(ctx.state.watchers('s2'), [])
     assert.equal((await ctx.handle(signedRequest(ctx, deviceId, 'POST', '/v1/watch', { sessionIds: ['bad id with spaces'] }))).status, 400)
+  } finally {
+    await ctx.cleanup()
+  }
+})
+
+test('offers the Android build to paired phones and in status', async () => {
+  const release = {
+    versionCode: 17,
+    versionName: '0.3.8',
+    url: 'https://github.com/kinocode-jp/dsh-mobile/releases/download/android-v0.3.8-17/dsh-mobile-v0.3.8-17.apk',
+    sha256: 'EA5F7519289A9A2871C1A57795E4E142BC8903F03C0FFF875BC69F94DE1995EE',
+    size: 36470571,
+  }
+  const ctx = await setup({ appRelease: usableAppRelease(release) })
+  try {
+    const code = ctx.codes.issue()
+    const paired = await ctx.pair(JSON.stringify({ code: code.code, publicKey: ctx.device.publicKey }))
+    assert.equal(paired.status, 200)
+    assert.deepEqual(paired.body.app, { ...release, sha256: release.sha256.toLowerCase() })
+    const status = await ctx.handle(signedRequest(ctx, paired.body.deviceId, 'GET', '/v1/status'))
+    assert.deepEqual(status.body.app, { ...release, sha256: release.sha256.toLowerCase() })
+  } finally {
+    await ctx.cleanup()
+  }
+})
+
+test('the shipped app release entry is well formed', () => {
+  assert.deepEqual(usableAppRelease(APP_RELEASE), APP_RELEASE)
+  for (const broken of [
+    { ...APP_RELEASE, versionCode: 0 },
+    { ...APP_RELEASE, versionCode: 1.5 },
+    { ...APP_RELEASE, versionName: '0.3.8 ' },
+    { ...APP_RELEASE, url: APP_RELEASE.url.replace('https://', 'http://') },
+    { ...APP_RELEASE, url: 'https://example.com/x/y.apk' },
+    { ...APP_RELEASE, url: APP_RELEASE.url + '?x=1' },
+    { ...APP_RELEASE, sha256: 'abc' },
+    { ...APP_RELEASE, size: 0 },
+    { ...APP_RELEASE, size: 500 * 1024 * 1024 },
+    null,
+  ]) {
+    assert.equal(usableAppRelease(broken), null, JSON.stringify(broken))
+  }
+})
+
+test('omits the app offer when the build has none', async () => {
+  const ctx = await setup()
+  try {
+    const code = ctx.codes.issue()
+    const paired = await ctx.pair(JSON.stringify({ code: code.code, publicKey: ctx.device.publicKey }))
+    assert.equal(paired.status, 200)
+    assert.equal('app' in paired.body, false)
+    const status = await ctx.handle(signedRequest(ctx, paired.body.deviceId, 'GET', '/v1/status'))
+    assert.equal('app' in status.body, false)
   } finally {
     await ctx.cleanup()
   }
