@@ -32,5 +32,7 @@ jobs:
             echo "::error::Run this on the tag $version (got $GITHUB_REF_TYPE $GITHUB_REF_NAME)."
             exit 1
           fi
+      # The gateway's WebSocket relay needs its runtime dependency (ws).
+      - run: npm install --no-audit --no-fund --no-package-lock
       - run: npm test
       - run: npm publish --access public
