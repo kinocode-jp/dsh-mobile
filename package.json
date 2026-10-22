@@ -70,5 +70,8 @@
   "license": "MIT",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
   }
 }

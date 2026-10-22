@@ -12,6 +12,18 @@ test('defaults', () => {
   assert.equal(config.gatewayHosts, undefined)
   assert.equal(config.relayUrl, '')
   assert.equal(config.previewMaxChars, 400)
+  assert.equal(config.historyEnabled, true)
+  assert.equal(config.historyCacheEnabled, true)
+  assert.equal(config.historyMaxMessages, 40)
+  assert.equal(config.historyMinMessages, 10)
+})
+
+test('phone history budgets validate and caching can be disabled independently', () => {
+  assert.equal(parseConfig({ historyMaxMessages: 3 }, env).historyMinMessages, 3)
+  assert.equal(parseConfig({ historyCacheEnabled: false }, env).historyCacheEnabled, false)
+  assert.equal(parseConfig({ historyEnabled: false }, env).historyEnabled, false)
+  for (const historyMaxMessages of [0, -1, 501, 1.2, 'bad']) assert.throws(() => parseConfig({ historyMaxMessages }, env), /historyMaxMessages/)
+  for (const historyMinMessages of [0, 41, 1.5]) assert.throws(() => parseConfig({ historyMinMessages }, env), /historyMinMessages/)
 })
 
 test('gatewayHosts accepts only LAN and Tailscale addresses', () => {

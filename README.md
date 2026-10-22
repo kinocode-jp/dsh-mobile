@@ -6,6 +6,7 @@ English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 - Pair your phone by scanning a QR code in the DSH sidebar.
 - Use the regular DSH web UI on your phone through an HTTPS gateway running on your computer.
+- On phones, let the session title use the available header width and tap it to see the full title. Only the session header reserves space for the floating navigation buttons.
 - Answer approval requests and agent questions from notifications in the live desktop session (the first answer from any device wins).
 - Receive a notification when a watched session finishes its turn.
 
@@ -70,6 +71,27 @@ All fields are optional. Add them to your profile's `cordis.patch.yml`. A profil
 | `stateDir` | `$DSH_HOME/mobile-bridge` | Absolute path for host identity, paired devices, and certificates. `$DSH_HOME` defaults to `~/.dsh`. |
 
 The configuration ID `mobile-bridge` and log name `dsh-mobile-bridge` are kept for compatibility with earlier versions.
+
+## Phone history loading
+
+Only the phone gateway limits opening history to 40 messages, targeting the latest 10 messages and one turn. Older-page loading remains unchanged. These budgets count user/assistant messages, not tool events or bytes. No DSH core or desktop changes are required.
+
+An authenticated app-shell script saves opening snapshots in IndexedDB. Reopening the same host/device/session advertises verified SHA-256 record hashes; the gateway sends references for matching records and full data for misses. The browser reconstructs the authoritative snapshot before the stock client sees it. Cursor, projections, header, and assistant-stream baseline always come from the current server snapshot, never an optimistic cached replay. Reading the host's log still uses stock DSH; this optimization reduces phone transfer and initial history size, not host disk work.
+
+Only records of at least 256 serialized UTF-8 bytes are advertised, with the hash property limited to 8KiB. If none qualify, no manifest is uploaded. Delta selection accounts for manifest upload as well as download savings. A complete cache miss can still incur the already-uploaded manifest overhead; total traffic is not guaranteed to shrink in every case.
+
+Relay writes are serialized with source pause/resume while the destination drains. Buffered data exceeding 64MiB no longer causes termination. Stock WebSocket's 100MiB per-frame limit still applies; the message-count budget is not a byte limit.
+
+The cache retains opening snapshots only, bounded globally to 12 sessions and 8MiB with a seven-day reuse expiry. Expired entries are removed during a later save/trim; physical deletion while the app is inactive is not guaranteed. It contains conversation text and tool results. On shared devices set `historyCacheEnabled: false` to stop persistence/reuse; this does not erase existing records. Clear the app/WebView's stored data in Android settings to erase them (pairing may need repeating). Revoking a device blocks connections and cache reuse, but does not remotely erase stored data. Storage denial falls back to online loading; a missing reference invalidates that cache entry and reconnects for a full snapshot. Storage is origin-specific, so changing LAN addresses causes a cold load; a stable Tailscale origin improves reuse.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `historyEnabled` | `true` | Optimize phone history; false restores stock transport. |
+| `historyCacheEnabled` | `true` | Save/reuse device history independently of opening-page sizing. |
+| `historyMaxMessages` | `40` | Opening cap, integer 1–500. |
+| `historyMinMessages` | `10` | Recent messages before turn alignment, integer 1–cap; defaults to the smaller cap when below 10. |
+
+Restart the DSH process loading this plugin, then reload the phone screen. Run `node --test test/*.test.mjs` for unit/TLS lifecycle tests. For a real Chromium persistence/reload/delta smoke, supply Playwright with `PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node test/history-browser.smoke.mjs`; optionally set `CHROME_PATH` to the Chrome executable.
 
 ## How it works
 

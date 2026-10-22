@@ -47,6 +47,18 @@ function get(port, ca, path, headers = {}) {
   })
 }
 
+function post(port, ca, path, headers = {}, body = '') {
+  return new Promise((resolve, reject) => {
+    const req = request({ host: '127.0.0.1', port, path, ca, servername: undefined, method: 'POST', headers }, (res) => {
+      const chunks = []
+      res.on('data', c => chunks.push(c))
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }))
+    })
+    req.on('error', reject)
+    req.end(body)
+  })
+}
+
 test('the gateway requires a session and proxies with the upstream credential only', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'mobile-bridge-gw-'))
   const seen = []
@@ -96,6 +108,89 @@ test('the gateway requires a session and proxies with the upstream credential on
 
     webSessions.revokeDevice('device-1')
     assert.equal((await get(port, ca, '/', { cookie: `dshmb_session=${session.value}` })).status, 401)
+  } finally {
+    await gateway.close()
+    upstream.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('strips the Session-list projections the phone sidebar never renders', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mobile-bridge-gw-'))
+  const upstream = createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/api/session/list') {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        type: 'server-response',
+        rpcId: 'r1',
+        result: {
+          ok: true,
+          value: {
+            items: [{
+              sessionId: 's1',
+              updatedAt: 9,
+              running: false,
+              blank: false,
+              cwd: '/tmp',
+              projections: {
+                kind: 'sequenced',
+                asOfSeq: 3,
+                values: {
+                  title: 'Kept title',
+                  sessionListMetadata: { blank: false, lastPromptAt: 8 },
+                  turnOutline: [{ turns: 'x'.repeat(2000) }],
+                  modelSelection: { provider: 'p', model: 'm' },
+                  imageLimits: { maxImageBytes: 1, maxImagesPerMessage: 1, maxMessageImageBytes: 1, maxImagePixels: 1, maxImageDimension: 1, mediaTypes: [] },
+                },
+              },
+            }],
+          },
+        },
+      }))
+      return
+    }
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end('<title>DeepSeek Harness</title>')
+  })
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve))
+  const upstreamPort = upstream.address().port
+  const tls = new TlsStore(join(dir, 'tls'))
+  const webSessions = new WebSessions()
+  const gateway = new Gateway({
+    port: 0,
+    hosts: ['127.0.0.1'],
+    tls,
+    webSessions,
+    handleControl: async () => ({ status: 200, body: {} }),
+    pair: async () => ({ status: 401, body: { error: 'invalid_code' } }),
+    upstream: { target: async () => ({ port: upstreamPort, cookie: 'dsh_auth=owner' }), invalidate() {} },
+    hostId: () => 'host-1',
+    log: () => {},
+  })
+  try {
+    await tls.loadCa()
+    gateway.deps.hosts = ['127.0.0.1']
+    await gateway.refresh()
+    const port = gateway.servers.get('127.0.0.1').address().port
+    const ca = tls.ca.certPem
+
+    const session = webSessions.create('device-1')
+    const requestBody = JSON.stringify({ type: 'client-request', rpcId: 'r1', method: 'session/list', payload: { args: { _request: {} } } })
+    const resp = await post(port, ca, '/api/session/list', {
+      cookie: `dshmb_session=${session.value}`,
+      'content-type': 'application/json',
+    }, requestBody)
+    assert.equal(resp.status, 200)
+    const values = JSON.parse(resp.body).result.value.items[0].projections.values
+    assert.equal(values.title, 'Kept title')
+    assert.deepEqual(values.sessionListMetadata, { blank: false, lastPromptAt: 8 })
+    assert.equal('turnOutline' in values, false)
+    assert.equal('modelSelection' in values, false)
+    assert.equal('imageLimits' in values, false)
+
+    // A non-list path passes through untouched.
+    const page = await get(port, ca, '/', { cookie: `dshmb_session=${session.value}` })
+    assert.match(page.body, /DeepSeek Harness/)
   } finally {
     await gateway.close()
     upstream.close()
