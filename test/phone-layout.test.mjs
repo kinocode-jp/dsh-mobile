@@ -28,10 +28,10 @@ test('long-pressing a session row selects no text and opens no callout', () => {
 test('the sidebar keeps its list position and opens the row menu on a long press', () => {
   assert.match(source, /SIDEBAR_SCROLL_KEY = "dsh-mobile-bridge:sidebar-scroll"/)
   assert.match(source, /if \(opening\) restoreScroll\(\);/, 'the floating button restores the list on opening')
-  assert.match(source, /if \(open && !wasOpen && !restoring\) restoreScroll\(\);/, 'any other opening restores it too')
+  assert.match(source, /if \(open && !wasOpen && !openingRestored\) restoreScroll\(\);/, 'any other opening restores it too, once per opening')
   assert.match(source, /if \(target\.closest\(ROW_ACTIONS\)\) return;/, 'the row menu button does not close the sidebar')
   assert.match(source, /event\.stopImmediatePropagation\(\);/, 'the release after a long press does not open the session')
-  for (const type of ['focusin', 'scroll', 'touchstart', 'touchend', 'touchcancel', 'wheel', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'dragstart', 'dragover', 'dragend', 'contextmenu']) {
+  for (const type of ['visibilitychange', 'focusin', 'scroll', 'touchstart', 'touchend', 'touchcancel', 'wheel', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'dragstart', 'dragover', 'dragend', 'contextmenu']) {
     const added = source.split(`document.addEventListener("${type}"`).length - 1
     const removed = source.split(`document.removeEventListener("${type}"`).length - 1
     assert.equal(added, removed, `${type} listeners are removed with the phone layout`)
@@ -40,18 +40,20 @@ test('the sidebar keeps its list position and opens the row menu on a long press
 
 test('older history loads on its own near the top, one page per reader gesture, at rest', () => {
   assert.match(source, /flow\.closest\("\[data-conversation-scroll\]"\)/, 'watches the conversation body, which is what scrolls')
-  assert.match(source, /if \(touching \|\| now - readerInputAt > OLDER_ARM_MS \|\| loadedGesture === gesture\) return;/, 'only after reader input, never mid-touch, once per gesture')
+  assert.match(source, /if \(touching \|\| !gestureScrolled \|\| now - readerInputAt > OLDER_ARM_MS \|\| loadedGesture === gesture\) return;/, 'only after a gesture that scrolled, never mid-touch, once per gesture')
   assert.match(source, /if \(now - lastChatScrollAt < OLDER_SETTLE_MS\) \{ scheduleOlderCheck\(\); return; \}/, 'waits for scrolling to settle so DSH keeps the position')
   assert.match(source, /\[data-chat-flow\] > \[class\*='_older'\] button/, 'presses DSH\'s own button')
-  assert.match(source, /if \(!button \|\| button\.disabled\) return;/, 'never while a page is loading')
+  assert.match(source, /if \(button\.disabled\) \{ clearTimeout\(settleTimer\); settleTimer = setTimeout\(loadOlderNearTop, OLDER_BUSY_RETRY_MS\); return; \}/, 'never while a page is loading; looks again once it has landed')
 })
 
 test('the sidebar backdrop hides in the same frame DSH marks the sidebar collapsed', () => {
-  assert.match(css, /html\.dmb-phone:has\(\[class\*='_sidebarCol'\] \[class\*='_collapsed'\]\) \.dmb-backdrop, html\.dmb-phone:not\(:has\(\[class\*='_sidebarCol'\]\)\) \.dmb-backdrop, \.dmb-backdrop\[hidden\] \{ display: none; \}/)
+  assert.match(css, /html\.dmb-phone:not\(\.dmb-sidebar-open\) \.dmb-backdrop, \.dmb-backdrop\[hidden\] \{ display: none; \}/)
+  assert.ok(!/html\.dmb-phone:has\(/.test(css), 'no document-wide :has() on html')
+  assert.match(source, /const sidebarObserver = new MutationObserver\(\(\) => \{\n\s*syncSidebarClass\(\);/, 'the class follows the sidebar before the next frame')
   assert.ok(!/backdrop\.hidden = /.test(source), 'no timer-driven toggle that lags behind the sidebar')
 })
 
-const statusSource = source.match(/const STATUS_RANK = [\s\S]*?\n    function projectStatus\(services\) \{[\s\S]*?\n    \}\n/)
+const statusSource = source.match(/const STATUS_RANK = [\s\S]*?\n    function projectStatus\(services, nested = false\) \{[\s\S]*?\n    \}\n/)
 assert.ok(statusSource, 'projectStatus must be testable from the shipped client')
 const projectStatus = runInNewContext(statusSource[0] + '; projectStatus')
 
@@ -104,8 +106,8 @@ test('a long question keeps its options on screen: the question text scrolls and
 })
 
 test('settings rows with a wide text input put it on its own line instead of squeezing the label', () => {
-  assert.match(css, /\[data-shortcut-modal='settings'\] \[class\$='_row'\]:has\(> \[class\*='_field'\]\) \{ flex-wrap: wrap !important; row-gap: 8px; \}/)
-  assert.match(css, /\[data-shortcut-modal='settings'\] \[class\$='_row'\]:has\(> \[class\*='_field'\]\) > \* \{ flex: 1 1 100% !important; \}/)
+  assert.match(css, /\[data-shortcut-modal='settings'\] \[class\$='_row'\]:has\(> :is\(\[class\$='_field'\], \[class\*='_field '\]\)\) \{ flex-wrap: wrap !important; row-gap: 8px; \}/)
+  assert.match(css, /\[data-shortcut-modal='settings'\] \[class\$='_row'\]:has\(> :is\(\[class\$='_field'\], \[class\*='_field '\]\)\) > \* \{ flex: 1 1 100% !important; \}/, 'the label and the input each take the whole line')
   assert.ok(!/_row'\]:has\(> \[class\*='_rowText'\]\)/.test(css), 'rows with a select or switch keep their one-line layout')
 })
 
@@ -128,5 +130,42 @@ test('settings close with a left-to-right swipe, ahead of the app\'s own sidebar
   }
   assert.match(source, /if \(scrollsSideways\(event\.target, sheet\)\) return;/, 'a touch on a sideways scroller (the tab strip) scrolls it instead')
   assert.match(source, /if \(swipe\.dx < width \* 0\.3 && swipe\.v < 0\.5\) \{ springBack\(swipe\); return; \}/, 'a short, slow swipe springs back')
-  assert.match(source, /const close = swipe\.sheet\.querySelector\("\[class\*='_close'\]"\);/, 'closing presses DSH\'s own close button')
+  assert.match(source, /const close = swipe\.sheet\.querySelector\(SHEET_CLOSE\);/, 'closing presses DSH\'s own close button')
+  assert.match(source, /if \(swipe\.held\) event\.stopPropagation\(\);/, 'only a sideways touch is held from the app; taps pass through')
+  assert.match(source, /const SWIPE_HOLD_PX = 4;/)
+  assert.match(source, /const SWIPE_START_PX = 8;/, 'starts before the app\'s 10px sidebar swipe')
+})
+
+test('in the workspace-tree grouping a closed project also carries the states of the projects nested under it', () => {
+  const statuses = new Map([['c1', { running: false, pendingInteraction: { kind: 'approval' }, completionUnread: false }], ['p1', { running: true, pendingInteraction: undefined, completionUnread: false }]])
+  const byId = { c1: { id: 'c1', blank: false }, p1: { id: 'p1', blank: false } }
+  const services = {
+    workspaces: { list: { getSnapshot: () => ({ items: [
+      { workspaceId: 'P', path: '/w/app', sessionIds: ['p1'] },
+      { workspaceId: 'C', path: '/w/app/sub/', sessionIds: ['c1'] },
+      { workspaceId: 'S', path: '/w/application', sessionIds: [] },
+    ], archivedSessionIds: [] }) } },
+    uiSession: { sessionStatus: { getSnapshot: () => statuses } },
+    sessions: { list: { getSnapshot: () => ({ ids: ['p1', 'c1'], byId }) } },
+  }
+  assert.deepEqual(Object.fromEntries(projectStatus(services)), { P: 'ongoing', C: 'warning' }, 'grouped by workspace: each project on its own')
+  assert.deepEqual(Object.fromEntries(projectStatus(services, true)), { P: 'warning', C: 'warning' }, 'tree: the parent shows its nested project\'s approval; a sibling with a longer name is not nested')
+})
+
+test('nesting compares Windows paths with "/" separators, and a workspace at the root holds every other one', () => {
+  const statuses = new Map([['c', { running: false, pendingInteraction: { kind: 'question' }, completionUnread: false }]])
+  const services = (items) => ({
+    workspaces: { list: { getSnapshot: () => ({ items, archivedSessionIds: [] }) } },
+    uiSession: { sessionStatus: { getSnapshot: () => statuses } },
+    sessions: { list: { getSnapshot: () => ({ ids: ['c'], byId: { c: { id: 'c', blank: false } } }) } },
+  })
+  const windows = projectStatus(services([
+    { workspaceId: 'P', path: 'C:\\work\\app', sessionIds: [] },
+    { workspaceId: 'C', path: 'C:\\work\\app\\sub\\', sessionIds: ['c'] },
+    { workspaceId: 'U', path: '\\\\server\\share', sessionIds: [] },
+  ]), true)
+  assert.equal(windows.get('P'), 'warning')
+  assert.equal(windows.get('U'), undefined)
+  const root = projectStatus(services([{ workspaceId: 'R', path: '/', sessionIds: [] }, { workspaceId: 'C', path: '/home/x', sessionIds: ['c'] }]), true)
+  assert.equal(root.get('R'), 'warning')
 })

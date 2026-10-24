@@ -260,3 +260,152 @@ test('widens the phone\'s older-history pages before DSH reads them', async () =
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+async function pageGateway({ history, respond, targetDelay = 0 }) {
+  const dir = await mkdtemp(join(tmpdir(), 'mobile-bridge-gw-'))
+  const received = []
+  const upstream = createServer((req, res) => {
+    const chunks = []
+    req.on('data', c => chunks.push(c))
+    req.on('end', () => {
+      received.push({ url: req.url, length: req.headers['content-length'], cookie: req.headers.cookie, body: Buffer.concat(chunks).toString('utf8') })
+      respond(res, received.length)
+    })
+  })
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve))
+  const upstreamPort = upstream.address().port
+  const tls = new TlsStore(join(dir, 'tls'))
+  const webSessions = new WebSessions()
+  let invalidated = 0
+  const gateway = new Gateway({
+    port: 0, hosts: ['127.0.0.1'], tls, webSessions,
+    handleControl: async () => ({ status: 200, body: {} }),
+    pair: async () => ({ status: 401, body: { error: 'invalid_code' } }),
+    upstream: { target: async () => { if (targetDelay) await new Promise(r => setTimeout(r, targetDelay)); return { port: upstreamPort, cookie: 'dsh_auth=owner' + invalidated } }, invalidate() { invalidated++ } },
+    hostId: () => 'host-1', log: () => {}, history,
+  })
+  await tls.loadCa()
+  gateway.deps.hosts = ['127.0.0.1']
+  await gateway.refresh()
+  const port = gateway.servers.get('127.0.0.1').address().port
+  const cookie = `dshmb_session=${webSessions.create('device-1').value}`
+  const send = (body, headers = {}) => post(port, tls.ca.certPem, '/api/session/page', { cookie, 'content-type': 'application/json', ...headers }, body)
+  const close = async () => { await gateway.close(); upstream.close(); await rm(dir, { recursive: true, force: true }) }
+  return { send, received, close, invalidated: () => invalidated, connection: { port, ca: tls.ca.certPem, cookie } }
+}
+const HISTORY = { enabled: true, cacheEnabled: true, maxMessages: 40, minMessages: 10, olderMinMessages: 150, olderMinTurns: 6 }
+const pageBody = request => JSON.stringify({ type: 'client-request', rpcId: 'r1', method: 'session/page', payload: { args: { request } } })
+const okPage = res => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"type":"server-response","rpcId":"r1","result":{"ok":true,"value":{"records":[]}}}') }
+
+test('an older-history page refused with 401 is sent again, widened, with the renewed DSH login', async () => {
+  const g = await pageGateway({ history: HISTORY, respond: (res, n) => { if (n === 1) { res.writeHead(401); res.end() } else okPage(res) } })
+  try {
+    const reply = await g.send(pageBody({ address: { kind: 'session', sessionId: 's1' }, beforeSeq: 9, maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } }))
+    assert.equal(reply.status, 200)
+    assert.equal(g.received.length, 2)
+    assert.equal(g.invalidated(), 1)
+    assert.equal(g.received[1].body, g.received[0].body, 'the same widened body both times')
+    assert.equal(g.received[1].cookie, 'dsh_auth=owner1', 'with the renewed login')
+    assert.deepEqual(JSON.parse(g.received[1].body).payload.args.request.turnWindow, { minMessages: 150, minTurns: 6 })
+  } finally { await g.close() }
+})
+
+test('an oversized page request gets a real 413 instead of a dropped connection', async () => {
+  const g = await pageGateway({ history: HISTORY, respond: okPage })
+  try {
+    const reply = await g.send('x'.repeat(70 * 1024))
+    assert.equal(reply.status, 413)
+    assert.match(reply.body, /payload_too_large/)
+    assert.equal(g.received.length, 0, 'nothing reaches DSH')
+  } finally { await g.close() }
+})
+
+test('page requests: no maxMessages caps at DSH\'s default 50; non-JSON and history-off pass through unchanged', async () => {
+  const g = await pageGateway({ history: HISTORY, respond: okPage })
+  try {
+    await g.send(pageBody({ address: { kind: 'session', sessionId: 's1' }, beforeSeq: 9 }))
+    assert.deepEqual(JSON.parse(g.received[0].body).payload.args.request.turnWindow, { minMessages: 50, minTurns: 6 })
+    await g.send('not json')
+    assert.equal(g.received[1].body, 'not json')
+    assert.equal(Number(g.received[1].length), 8)
+  } finally { await g.close() }
+  const off = await pageGateway({ history: { ...HISTORY, enabled: false }, respond: okPage })
+  try {
+    const body = pageBody({ address: { kind: 'session', sessionId: 's1' }, beforeSeq: 9, maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } })
+    await off.send(body)
+    assert.equal(off.received[0].body, body)
+  } finally { await off.close() }
+})
+
+test('a slow sender of an oversized page request still receives the 413 after its body arrives', async () => {
+  const g = await pageGateway({ history: HISTORY, respond: okPage })
+  try {
+    const { port, ca, cookie } = g.connection
+    const reply = await new Promise((resolve, reject) => {
+      const req = request({ host: '127.0.0.1', port, path: '/api/session/page', ca, method: 'POST', headers: { cookie, 'content-type': 'application/json' } }, res => {
+        const chunks = []
+        res.on('data', c => chunks.push(c))
+        res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }))
+      })
+      req.on('error', reject)
+      let sent = 0
+      const chunk = Buffer.alloc(32 * 1024, 120)
+      const step = () => { if (sent >= 10) { req.end(); return } sent++; req.write(chunk); setTimeout(step, 15) }
+      step()
+    })
+    assert.equal(reply.status, 413)
+    assert.equal(g.received.length, 0)
+  } finally { await g.close() }
+})
+
+test('an oversized page request whose whole body arrived before it was read still gets its 413', { timeout: 10_000 }, async () => {
+  const g = await pageGateway({ history: HISTORY, respond: okPage, targetDelay: 100 })
+  try {
+    const reply = await g.send('x'.repeat(70 * 1024))
+    assert.equal(reply.status, 413)
+  } finally { await g.close() }
+})
+
+test('a sender that keeps going past 1 MiB gets the 413 at once and its connection is closed', { timeout: 15_000 }, async () => {
+  const g = await pageGateway({ history: HISTORY, respond: okPage })
+  try {
+    const { port, ca, cookie } = g.connection
+    const result = await new Promise((resolve) => {
+      let status
+      const req = request({ host: '127.0.0.1', port, path: '/api/session/page', ca, method: 'POST', headers: { cookie, 'content-type': 'application/json' } }, res => {
+        status = res.statusCode
+        res.resume()
+        res.on('end', () => resolve({ status, closed: false }))
+        res.on('close', () => resolve({ status, closed: true }))
+      })
+      req.on('error', () => resolve({ status, closed: true }))
+      const chunk = Buffer.alloc(64 * 1024, 120)
+      let sent = 0
+      const step = () => { if (status !== undefined || sent > 40) return; sent++; req.write(chunk); setTimeout(step, 5) }
+      step()
+    })
+    assert.equal(result.status, 413)
+    assert.equal(g.received.length, 0)
+  } finally { await g.close() }
+})
+
+test('before authentication (pairing), an oversized body is refused after reading at most 64 KiB more', { timeout: 15_000 }, async () => {
+  const g = await pageGateway({ history: HISTORY, respond: okPage })
+  try {
+    const { port, ca } = g.connection
+    const result = await new Promise((resolve) => {
+      let status
+      const req = request({ host: '127.0.0.1', port, path: '/_dshmb/v1/pair', ca, method: 'POST', headers: { 'content-type': 'application/json' } }, res => {
+        status = res.statusCode
+        res.resume()
+        res.on('close', () => resolve({ status }))
+      })
+      req.on('error', () => resolve({ status }))
+      const chunk = Buffer.alloc(32 * 1024, 120)
+      let sent = 0
+      const step = () => { if (status !== undefined || sent > 20) return; sent++; req.write(chunk); setTimeout(step, 5) }
+      step()
+    })
+    assert.equal(result.status, 413)
+  } finally { await g.close() }
+})

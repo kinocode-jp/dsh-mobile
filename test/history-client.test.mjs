@@ -119,7 +119,9 @@ test('manifest property fits 8KiB and selects largest records without dropping c
     value.event.data.text += 'x'.repeat(seq)
     return value
   })
-  const { socket, messages } = harness({ entries: [cached(records)], config: { maxBytes: 1024 * 1024 } })
+  // Verifying 180 large records can exceed the 80 ms storage budget on a loaded test machine, which
+  // (correctly) skips the cache; this test is about manifest selection, so it allows more time.
+  const { socket, messages } = harness({ entries: [cached(records)], config: { maxBytes: 1024 * 1024, readBudgetMs: 5000 } })
   socket.send(JSON.stringify(open('s')))
   await until(() => socket.sent.length === 1)
   const manifest = JSON.parse(socket.sent[0]).dshMobileHistory
