@@ -38,7 +38,7 @@ Restart DSH. The log should show `[mobile-bridge] gateway listening {"origins":[
 
 The panel also lists paired phones and lets you remove them. Removing a phone revokes its access immediately. The panel is currently available only in Japanese.
 
-On the phone, the DSH sidebar is hidden so the conversation gets the full width. The round button at the top left opens it over the conversation; picking a session or tapping outside closes it. Desktop-only buttons are hidden.
+On the phone, the DSH sidebar is hidden so the conversation gets the full width. The round button at the top left opens it over the conversation; picking a session or tapping outside closes it. It reopens where you left the list, including the sessions shown with "さらに…件のセッションを表示" ("Show … more sessions"). Long-press a session and lift your finger to open its menu (pin, rename, fork, archive, copy session ID); this works even when a long title hides the row's buttons. Long-press and drag still reorders sessions as before. A closed project shows the most urgent state among its sessions with the same marks the sessions use (amber dot = waiting for an approval, review or answer, then spinner = running, then green dot = finished and not yet viewed). Desktop-only buttons are hidden.
 
 When you add a workspace on the phone, the computer's folders are listed on the phone instead of opening a folder dialog on the computer. Browse to a folder or type its path, then tap **このフォルダを使う** ("Use this folder").
 
@@ -74,7 +74,7 @@ The configuration ID `mobile-bridge` and log name `dsh-mobile-bridge` are kept f
 
 ## Phone history loading
 
-Only the phone gateway limits opening history to 40 messages, targeting the latest 10 messages and one turn. Older-page loading remains unchanged. These budgets count user/assistant messages, not tool events or bytes. No DSH core or desktop changes are required.
+Only the phone gateway limits opening history to 40 messages, targeting the latest 10 messages and one turn. Older history loads by itself when you scroll up to the top (once the scroll comes to rest, one page per swipe, keeping your place); the "さらに前の履歴を読み込む" ("Load earlier history") button stays as the loading indicator. Each older page brings at least 150 messages and 6 turns instead of stock DSH's 50 and 2. These budgets count user/assistant messages, not tool events or bytes. No DSH core or desktop changes are required.
 
 An authenticated app-shell script saves opening snapshots in IndexedDB. Reopening the same host/device/session advertises verified SHA-256 record hashes; the gateway sends references for matching records and full data for misses. The browser reconstructs the authoritative snapshot before the stock client sees it. Cursor, projections, header, and assistant-stream baseline always come from the current server snapshot, never an optimistic cached replay. Reading the host's log still uses stock DSH; this optimization reduces phone transfer and initial history size, not host disk work.
 
@@ -90,6 +90,8 @@ The cache retains opening snapshots only, bounded globally to 12 sessions and 8M
 | `historyCacheEnabled` | `true` | Save/reuse device history independently of opening-page sizing. |
 | `historyMaxMessages` | `40` | Opening cap, integer 1–500. |
 | `historyMinMessages` | `10` | Recent messages before turn alignment, integer 1–cap; defaults to the smaller cap when below 10. |
+| `historyOlderMinMessages` | `150` | Messages each "load older history" page brings at least (1–500); stock DSH asks for 50. |
+| `historyOlderMinTurns` | `6` | Turns each "load older history" page brings at least (1–50); stock DSH asks for 2. DSH's 500-message page cap still applies. |
 
 Restart the DSH process loading this plugin, then reload the phone screen. Run `node --test test/*.test.mjs` for unit/TLS lifecycle tests. For a real Chromium persistence/reload/delta smoke, supply Playwright with `PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node test/history-browser.smoke.mjs`; optionally set `CHROME_PATH` to the Chrome executable.
 

@@ -33,3 +33,13 @@ test('gatewayHosts accepts only LAN and Tailscale addresses', () => {
     assert.throws(() => parseConfig({ gatewayHosts: [host] }, env), /gatewayHosts/, host)
   }
 })
+
+test('older-history pages default to 150 messages and 6 turns and reject out-of-range values', () => {
+  const env = { HOME: '/tmp/home' }
+  const config = parseConfig({}, env)
+  assert.equal(config.historyOlderMinMessages, 150)
+  assert.equal(config.historyOlderMinTurns, 6)
+  assert.equal(parseConfig({ historyOlderMinMessages: 300, historyOlderMinTurns: 10 }, env).historyOlderMinTurns, 10)
+  for (const historyOlderMinMessages of [0, 501, 1.5, 'x']) assert.throws(() => parseConfig({ historyOlderMinMessages }, env), /historyOlderMinMessages/)
+  for (const historyOlderMinTurns of [0, 51, 2.5, 'x']) assert.throws(() => parseConfig({ historyOlderMinTurns }, env), /historyOlderMinTurns/)
+})

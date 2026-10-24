@@ -94,3 +94,15 @@ test('invalid manifests, cache misses, mutation, cancellation and errors use ful
   const full = JSON.stringify({ type: 'item', streamId: 's', value: { type: 'snapshot', records: [changed] } })
   assert.equal(p.host(full), full)
 })
+
+test('older-history pages are widened only for session/page with beforeSeq, never above maxMessages', async () => {
+  const { widenOlderPage } = await import('../lib/history-proxy.mjs')
+  const body = request => JSON.stringify({ type: 'client-request', rpcId: 'r', method: 'session/page', payload: { args: { request } } })
+  const widened = r => JSON.parse(widenOlderPage(body(r), { olderMinMessages: 150, olderMinTurns: 6 })).payload.args.request.turnWindow
+  assert.deepEqual(widened({ beforeSeq: 10, maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } }), { minMessages: 150, minTurns: 6 })
+  assert.deepEqual(widened({ beforeSeq: 10, maxMessages: 100, turnWindow: { minMessages: 50, minTurns: 2 } }), { minMessages: 100, minTurns: 6 })
+  assert.deepEqual(widened({ beforeSeq: 10, maxMessages: 500, turnWindow: { minMessages: 300, minTurns: 9 } }), { minMessages: 300, minTurns: 9 })
+  for (const text of [body({ maxMessages: 500 }), 'not json', JSON.stringify({ method: 'session/list', payload: { args: { request: { beforeSeq: 1 } } } })]) {
+    assert.equal(widenOlderPage(text, { olderMinMessages: 150, olderMinTurns: 6 }), text)
+  }
+})

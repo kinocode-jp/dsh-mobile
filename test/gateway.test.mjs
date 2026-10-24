@@ -197,3 +197,66 @@ test('strips the Session-list projections the phone sidebar never renders', asyn
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('widens the phone\'s older-history pages before DSH reads them', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mobile-bridge-gw-'))
+  const received = []
+  const upstream = createServer((req, res) => {
+    const chunks = []
+    req.on('data', c => chunks.push(c))
+    req.on('end', () => {
+      received.push({ url: req.url, length: req.headers['content-length'], body: Buffer.concat(chunks).toString('utf8') })
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"type":"server-response","rpcId":"r1","result":{"ok":true,"value":{"records":[],"hasMore":false}}}')
+    })
+  })
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve))
+  const upstreamPort = upstream.address().port
+  const tls = new TlsStore(join(dir, 'tls'))
+  const webSessions = new WebSessions()
+  const gateway = new Gateway({
+    port: 0,
+    hosts: ['127.0.0.1'],
+    tls,
+    webSessions,
+    handleControl: async () => ({ status: 200, body: {} }),
+    pair: async () => ({ status: 401, body: { error: 'invalid_code' } }),
+    upstream: { target: async () => ({ port: upstreamPort, cookie: 'dsh_auth=owner' }), invalidate() {} },
+    hostId: () => 'host-1',
+    log: () => {},
+    history: { enabled: true, cacheEnabled: true, maxMessages: 40, minMessages: 10, olderMinMessages: 150, olderMinTurns: 6 },
+  })
+  try {
+    await tls.loadCa()
+    gateway.deps.hosts = ['127.0.0.1']
+    await gateway.refresh()
+    const port = gateway.servers.get('127.0.0.1').address().port
+    const ca = tls.ca.certPem
+    const cookie = `dshmb_session=${webSessions.create('device-1').value}`
+    const page = request => JSON.stringify({ type: 'client-request', rpcId: 'r1', method: 'session/page', payload: { args: { request } } })
+    const address = { kind: 'session', sessionId: 's1' }
+
+    const older = await post(port, ca, '/api/session/page', { cookie, 'content-type': 'application/json' },
+      page({ address, throughSeq: 3308, beforeSeq: 3107, maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } }))
+    assert.equal(older.status, 200)
+    const sent = JSON.parse(received[0].body).payload.args.request
+    assert.deepEqual(sent.turnWindow, { minMessages: 150, minTurns: 6 })
+    assert.equal(sent.maxMessages, 500, 'DSH\'s own cap still bounds the page')
+    assert.equal(sent.beforeSeq, 3107)
+    assert.equal(Number(received[0].length), Buffer.byteLength(received[0].body), 'content-length matches the rewritten body')
+
+    // A turn jump already asks for more; it is never shrunk.
+    await post(port, ca, '/api/session/page', { cookie, 'content-type': 'application/json' },
+      page({ address, throughSeq: 3308, beforeSeq: 900, maxMessages: 500, turnWindow: { minMessages: 200, minTurns: 2 } }))
+    assert.deepEqual(JSON.parse(received[1].body).payload.args.request.turnWindow, { minMessages: 200, minTurns: 6 })
+
+    // A repair page (no beforeSeq) passes through byte for byte.
+    const repair = page({ address, throughSeq: 3308, maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } })
+    await post(port, ca, '/api/session/page', { cookie, 'content-type': 'application/json' }, repair)
+    assert.equal(received[2].body, repair)
+  } finally {
+    await gateway.close()
+    upstream.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
