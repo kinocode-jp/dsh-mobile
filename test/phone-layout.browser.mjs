@@ -360,6 +360,9 @@ await check('a panel page shows a floating × in the corner that returns to the 
   await page.waitForTimeout(100)
   assert.equal((await fabs()).close, true, 'shown at once on a panel page')
   assert.equal(await page.evaluate(() => document.querySelector("[data-dmb-fab='close']").getAttribute('aria-label')), 'チャットに戻る')
+  // The app's swipe-to-open (bridge.js fabButtons) takes the last non-right floating button as the
+  // sidebar's: it must still be the sidebar button, or a swipe presses × instead.
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('button.dmb-fab')].filter(b => !/右サイドバー|right sidebar/i.test(b.getAttribute('aria-label') || '')).at(-1).dataset.dmbFab), 'left')
   await page.click("[data-dmb-fab='close']")
   await page.waitForTimeout(100)
   assert.equal(await page.evaluate(() => window.openPanel && document.querySelector("[data-dmb-fab='close']").hidden), true)
