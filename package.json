@@ -1,6 +1,6 @@
 {
   "name": "@kinocode/dsh-mobile",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "DeepSeek Harness host plugin for the DSH Mobile Android app: pair with a QR, use DSH on the phone through its own HTTPS gateway, answer approvals and questions from notifications, push turn completion.",
   "keywords": [
     "deepseek-harness",

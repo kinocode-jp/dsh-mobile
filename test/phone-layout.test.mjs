@@ -96,3 +96,9 @@ test('project marks show only on closed projects and only touch attributes React
   assert.match(css, /\[aria-expanded='false'\]\[data-dmb-status='done'\]::after/)
   assert.match(source, /row\.setAttribute\("data-dmb-status", state\);/)
 })
+
+test('a long question keeps its options on screen: the question text scrolls and the card may grow', () => {
+  assert.match(css, /html\.dmb-phone \[data-question-key\] section\[class\*='_card'\] \{ max-height: min\(80dvh, 640px\) !important; \}/)
+  assert.match(css, /html\.dmb-phone \[data-question-key\] \[class\*='_headingBlock'\] \{ max-height: 26dvh; overflow-y: auto; overscroll-behavior: contain; \}/)
+  assert.match(css, /\[data-question-key\] footer\[class\*='_footer'\] \{ flex-wrap: wrap; row-gap: 8px; \}/, 'the skip/send buttons wrap instead of overflowing a narrow card')
+})
