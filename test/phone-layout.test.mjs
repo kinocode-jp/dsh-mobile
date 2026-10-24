@@ -31,7 +31,7 @@ test('the sidebar keeps its list position and opens the row menu on a long press
   assert.match(source, /if \(open && !wasOpen && !restoring\) restoreScroll\(\);/, 'any other opening restores it too')
   assert.match(source, /if \(target\.closest\(ROW_ACTIONS\)\) return;/, 'the row menu button does not close the sidebar')
   assert.match(source, /event\.stopImmediatePropagation\(\);/, 'the release after a long press does not open the session')
-  for (const type of ['scroll', 'touchstart', 'touchend', 'touchcancel', 'wheel', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'dragstart', 'dragover', 'dragend', 'contextmenu']) {
+  for (const type of ['focusin', 'scroll', 'touchstart', 'touchend', 'touchcancel', 'wheel', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'dragstart', 'dragover', 'dragend', 'contextmenu']) {
     const added = source.split(`document.addEventListener("${type}"`).length - 1
     const removed = source.split(`document.removeEventListener("${type}"`).length - 1
     assert.equal(added, removed, `${type} listeners are removed with the phone layout`)
@@ -112,4 +112,11 @@ test('settings rows with a wide text input put it on its own line instead of squ
 test('the settings close button floats instead of holding a whole row', () => {
   assert.match(css, /> \[class\*='_header'\]:not\(:has\(> \[class\*='_actions'\] :not\(\[data-slot\]:empty\)\)\) \{ display: contents !important; \}/, 'the row goes away only when its actions slot is empty')
   assert.match(css, /> \[class\*='_header'\] > \[class\*='_close'\] \{ position: fixed !important; top: 6px; right: 8px;/)
+})
+
+test('opening a session does not bring the keyboard up; tapping the message box still does', () => {
+  assert.match(source, /if \(target\.closest\("\[data-row-key\^='session:'\]"\)\) quietComposerFocus\(\);/, 'picking a session in the sidebar')
+  assert.match(source, /window\.addEventListener\("dsh-mobile-bridge:open-session", quietComposerFocus\);/, 'the app opening a session')
+  assert.match(source, /if \(!field\.closest\("\[data-composer-card\]"\)[^\n]*\) return;\n\s*field\.blur\(\);/, 'only the message box loses the automatic focus')
+  assert.match(source, /event\.target\.closest\("\[data-composer-card\]"\)\) composerFocusQuietUntil = 0;/, 'a tap on the message box ends the quiet period')
 })
