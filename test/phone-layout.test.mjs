@@ -102,3 +102,14 @@ test('a long question keeps its options on screen: the question text scrolls and
   assert.match(css, /html\.dmb-phone \[data-question-key\] \[class\*='_headingBlock'\] \{ max-height: 26dvh; overflow-y: auto; overscroll-behavior: contain; \}/)
   assert.match(css, /\[data-question-key\] footer\[class\*='_footer'\] \{ flex-wrap: wrap; row-gap: 8px; \}/, 'the skip/send buttons wrap instead of overflowing a narrow card')
 })
+
+test('settings rows with a wide text input put it on its own line instead of squeezing the label', () => {
+  assert.match(css, /\[data-shortcut-modal='settings'\] \[class\$='_row'\]:has\(> \[class\*='_field'\]\) \{ flex-wrap: wrap !important; row-gap: 8px; \}/)
+  assert.match(css, /\[data-shortcut-modal='settings'\] \[class\$='_row'\]:has\(> \[class\*='_field'\]\) > \* \{ flex: 1 1 100% !important; \}/)
+  assert.ok(!/_row'\]:has\(> \[class\*='_rowText'\]\)/.test(css), 'rows with a select or switch keep their one-line layout')
+})
+
+test('the settings close button floats instead of holding a whole row', () => {
+  assert.match(css, /> \[class\*='_header'\]:not\(:has\(> \[class\*='_actions'\] :not\(\[data-slot\]:empty\)\)\) \{ display: contents !important; \}/, 'the row goes away only when its actions slot is empty')
+  assert.match(css, /> \[class\*='_header'\] > \[class\*='_close'\] \{ position: fixed !important; top: 6px; right: 8px;/)
+})
