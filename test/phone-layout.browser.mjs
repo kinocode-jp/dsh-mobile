@@ -19,6 +19,7 @@ body{margin:0;font:14px sans-serif} .X_frame{display:block;height:100vh}
 [data-shortcut-modal='settings']{position:fixed;inset:0;background:#fff}
 </style></head><body>
 <div class="X_frame"><div class="X_sidebarCol" id="col"></div><div class="X_centerCol">
+  <div data-slot="conversation.session.header.actions" style="display:contents"><button aria-label="サブエージェント21件" id="h-sub"><span>サブエージェント21件</span><svg width="14" height="14"></svg></button><button aria-label="1件のバックグラウンドジョブが実行中" id="h-jobs"><span>1件のバックグラウンドジョブが実行中</span></button></div>
   <div data-conversation-scroll id="chat"><div data-chat-flow id="flow"><div class="K_older"><button id="older">さらに前の履歴を読み込む</button></div></div></div>
 </div></div>
 <script>
@@ -34,7 +35,9 @@ function renderSidebar() {
   const own = Math.min(dsh.shown, dsh.total)
   const rows = dsh.sessionsReady ? Array.from({ length: own }, (_, i) => '<div class="J_sessionRow" data-row-key="session:a' + i + '"><span class="J_title">A' + i + '</span><span class="J_rowActions"><button>…</button></span></div>').join('') : ''
   const more = dsh.sessionsReady && dsh.total > 5 ? '<button class="K_sessionOverflowButton" data-row-key="overflow:A" aria-expanded="' + (own >= dsh.total) + '">more</button>' : ''
-  col.innerHTML = '<div class="X_root"><button aria-label="サイドバーを折りたたむ">close</button><div role="tree" aria-label="セッション">'
+  col.innerHTML = '<div class="X_root"><button aria-label="サイドバーを折りたたむ">close</button>'
+    + '<button class="P_panelRow" id="panel-plugins">プラグイン</button><button aria-label="表示オプション" id="view-options">⋯</button><button aria-label="アカウントメニュー" aria-haspopup="menu" id="account">その他</button>'
+    + '<div role="tree" aria-label="セッション">'
     + '<div class="K_groupSection"><div class="J_projectRow" data-row-key="workspace:A" aria-expanded="true">A</div>'
     + '<div class="J_sessionRow" data-row-key="session:blank"><span class="J_title">新規セッション</span></div>'
     + rows
@@ -46,6 +49,14 @@ function renderSidebar() {
     + '</div></div>'
 }
 document.addEventListener('click', e => {
+  if (e.target.id === 'account') {
+    // DSH's menu renders outside the sidebar (a portal).
+    const menu = document.createElement('div')
+    menu.setAttribute('role', 'menu')
+    menu.style.cssText = 'position:fixed;left:20px;bottom:80px;z-index:2000;background:white'
+    menu.innerHTML = '<button role="menuitem" id="menu-settings">設定</button>'
+    document.body.append(menu)
+  }
   const label = e.target.closest('button')?.getAttribute('aria-label')
   if (label === 'サイドバーを開く' || label === 'サイドバーを折りたたむ') { dsh.open = label === 'サイドバーを開く'; dsh.shown = 5; renderSidebar() }
   if (e.target.closest('[data-row-key="overflow:A"]')) {
@@ -108,6 +119,13 @@ async function check(name, fn, setup = '') {
       workspaces: { list: { getSnapshot: () => ({ items: [{ workspaceId: 'Z0', path: '/z0', sessionIds: ['z'] }], archivedSessionIds: [] }) } },
       uiSession: { sessionStatus: { getSnapshot: () => new Map([['z', { running: false, pendingInteraction: { kind: 'question' }, completionUnread: false }]]) } },
       sessions: { list: { getSnapshot: () => ({ ids: ['z'], byId: { z: { id: 'z', blank: false } } }) } },
+      // DSH's layout service: which central panel is open (null = the chat).
+      layout: (() => {
+        const listeners = new Set()
+        let info = { activePanelId: null }
+        window.openPanel = id => { info = { activePanelId: id }; listeners.forEach(fn => fn()) }
+        return { panelInfo: { getSnapshot: () => info, subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn) } }, selectPanel: id => window.openPanel(id) }
+      })(),
     }
     plugin.apply({ effect: fn => effects.push(fn()), get: name => services[name], slots: { inject: () => () => {}, register: () => () => {} } })
     window.undoPlugin = () => effects.forEach(off => typeof off === 'function' && off())
@@ -321,12 +339,54 @@ await check('reaching the top while a page is still loading: the next page loads
   assert.equal(await page.evaluate(() => dsh.olderClicks), 2)
 })
 
+await check('picking a panel or an account-menu item closes the sidebar; controls inside it do not', async ({ page }) => {
+  const sidebarOpen = () => page.evaluate(() => dsh.open)
+  await toggleSidebar(page); await page.waitForTimeout(400)
+  await page.click('#view-options'); await page.waitForTimeout(400)
+  assert.equal(await sidebarOpen(), true, 'view options stay in the sidebar')
+  await page.click('#panel-plugins'); await page.waitForTimeout(400)
+  assert.equal(await sidebarOpen(), false, 'a panel closes it')
+  await toggleSidebar(page); await page.waitForTimeout(400)
+  await page.click('#account'); await page.waitForTimeout(300)
+  assert.equal(await sidebarOpen(), true, 'opening the account menu keeps it open')
+  await page.click('#menu-settings'); await page.waitForTimeout(400)
+  assert.equal(await sidebarOpen(), false, 'an account-menu item closes it')
+})
+
+await check('a panel page shows a floating × in the corner that returns to the chat', async ({ page }) => {
+  const fabs = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.dmb-fab')].map(b => [b.dataset.dmbFab, !b.hidden])))
+  assert.equal((await fabs()).close, false, 'none on the chat')
+  await page.evaluate(() => openPanel('plugins'))
+  await page.waitForTimeout(100)
+  assert.equal((await fabs()).close, true, 'shown at once on a panel page')
+  assert.equal(await page.evaluate(() => document.querySelector("[data-dmb-fab='close']").getAttribute('aria-label')), 'チャットに戻る')
+  await page.click("[data-dmb-fab='close']")
+  await page.waitForTimeout(100)
+  assert.equal(await page.evaluate(() => window.openPanel && document.querySelector("[data-dmb-fab='close']").hidden), true)
+})
+
+await check('header counts become an icon and a number, keeping the full label as their name', async ({ page }) => {
+  await page.waitForTimeout(400)
+  const items = await page.evaluate(() => ['#h-sub', '#h-jobs'].map(id => { const b = document.querySelector(id); return [b.dataset.dmbCompact, b.dataset.dmbCount, b.hasAttribute('data-dmb-live'), getComputedStyle(b.querySelector('span')).display, b.getAttribute('aria-label')] }))
+  assert.deepEqual(items, [['subagents', '21', false, 'none', 'サブエージェント21件'], ['jobs', '1', true, 'none', '1件のバックグラウンドジョブが実行中']])
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#h-sub'), '::after').content), '"21"')
+})
+
+await check('a session opened from a notification closes the sidebar and leaves a panel page', async ({ page }) => {
+  await toggleSidebar(page); await page.waitForTimeout(400)
+  await page.evaluate(() => openPanel('plugins'))
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('dsh-mobile-bridge:open-session', { detail: { sessionId: 'session-1' } })))
+  await page.waitForTimeout(400)
+  assert.equal(await page.evaluate(() => dsh.open), false, 'the sidebar closed')
+  assert.equal(await page.evaluate(() => document.querySelector("[data-dmb-fab='close']").hidden), true, 'back on the chat')
+})
+
 await check('a closed project shows its waiting session as soon as the sidebar opens; turning the plugin off leaves no marks behind', async ({ page }) => {
   await toggleSidebar(page)
   await page.waitForFunction(() => document.querySelector('[data-row-key="workspace:Z0"]')?.getAttribute('data-dmb-status') === 'warning', null, { timeout: 250 })
   assert.equal(await page.evaluate(() => document.querySelector('[data-row-key="workspace:Z0"]').getAttribute('aria-description')), '対応待ちのセッションがあります')
   await page.evaluate(() => undoPlugin())
-  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('dmb-phone') || document.documentElement.classList.contains('dmb-sidebar-open') || !!document.querySelector('.dmb-backdrop, .dmb-fab, [data-dmb-status]')), false)
+  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('dmb-phone') || document.documentElement.classList.contains('dmb-sidebar-open') || !!document.querySelector('.dmb-backdrop, .dmb-fab, [data-dmb-status], [data-dmb-compact]')), false)
 })
 
 await browser.close()

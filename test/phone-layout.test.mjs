@@ -113,12 +113,13 @@ test('settings rows with a wide text input put it on its own line instead of squ
 
 test('the settings close button floats instead of holding a whole row', () => {
   assert.match(css, /> \[class\*='_header'\]:not\(:has\(> \[class\*='_actions'\] :not\(\[data-slot\]:empty\)\)\) \{ display: contents !important; \}/, 'the row goes away only when its actions slot is empty')
-  assert.match(css, /> \[class\*='_header'\] > \[class\*='_close'\] \{ position: fixed !important; top: 6px; right: 8px;/)
+  assert.match(css, /> \[class\*='_header'\] > \[class\*='_close'\] \{ position: fixed !important; top: 6px; right: 6px;/)
 })
 
 test('opening a session does not bring the keyboard up; tapping the message box still does', () => {
-  assert.match(source, /if \(target\.closest\("\[data-row-key\^='session:'\]"\)\) quietComposerFocus\(\);/, 'picking a session in the sidebar')
-  assert.match(source, /window\.addEventListener\("dsh-mobile-bridge:open-session", quietComposerFocus\);/, 'the app opening a session')
+  assert.match(source, /const session = target\.closest\("\[data-row-key\^='session:'\], \[class\*='_searchResultRow'\]"\);\n\s*if \(session\) quietComposerFocus\(\);/, 'picking a session (or a search result) in the sidebar')
+  assert.match(source, /const onAppOpenSession = \(\) => \{\n\s*quietComposerFocus\(\);/, 'the app opening a session')
+  assert.match(source, /window\.addEventListener\("dsh-mobile-bridge:open-session", onAppOpenSession\);/)
   assert.match(source, /if \(!field\.closest\("\[data-composer-card\]"\)[^\n]*\) return;\n\s*field\.blur\(\);/, 'only the message box loses the automatic focus')
   assert.match(source, /event\.target\.closest\("\[data-composer-card\]"\)\) composerFocusQuietUntil = 0;/, 'a tap on the message box ends the quiet period')
 })
@@ -168,4 +169,9 @@ test('nesting compares Windows paths with "/" separators, and a workspace at the
   assert.equal(windows.get('U'), undefined)
   const root = projectStatus(services([{ workspaceId: 'R', path: '/', sessionIds: [] }, { workspaceId: 'C', path: '/home/x', sessionIds: ['c'] }]), true)
   assert.equal(root.get('R'), 'warning')
+})
+
+test('the plugin add split button stays one 40px control and its menu spans the phone screen', () => {
+  assert.match(css, /html\.dmb-phone \[class\*='_centerCol'\] \[class\*='_addGroup'\] button \{ min-height: 40px; \}/)
+  assert.match(css, /html\.dmb-phone \[role='menu'\]\[class\*='_addMenu'\] \{ left: 12px !important; right: 12px !important; width: auto !important;/)
 })

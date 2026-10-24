@@ -78,7 +78,11 @@ try {
   if (!await sidebarOpen()) { await page.locator('[data-dmb-fab=left]').click(); await page.waitForTimeout(600) }
   const titles = () => page.evaluate(() => [...document.querySelectorAll("[class*='_sidebarCol'] [data-row-key^='session:']")].map(r => r.getAttribute('data-row-key')))
   const dragFrom = (index, toNext) => page.evaluate(async ([index, toNext]) => {
-    const rows = [...document.querySelectorAll("[class*='_sidebarCol'] [data-row-key^='session:'][draggable=true]")].filter(r => r.querySelector("[class*='_rowActions']"))
+    // Two neighbouring sessions of the same workspace (DSH reorders only within one): the first
+    // workspace section showing at least two of its own sessions.
+    const own = g => [...g.querySelectorAll("[data-row-key^='session:'][draggable=true]")].filter(r => r.querySelector("[class*='_rowActions']") && r.closest("[class*='_groupSection']") === g)
+    const group = [...document.querySelectorAll("[class*='_sidebarCol'] [class*='_groupSection']")].find(g => own(g).length >= 2)
+    const rows = group ? own(group) : []
     const src = rows[index], dst = rows[index + 1]
     const r = src.getBoundingClientRect(), x = r.left + 60, y = r.top + r.height / 2
     const pause = ms => new Promise(res => setTimeout(res, ms))
@@ -93,12 +97,12 @@ try {
     await pause(400)
   }, [index, toNext])
   const order = await titles()
-  await dragFrom(1, true)
+  await dragFrom(0, true)
   assert.equal(await page.locator('[role=menuitem]').count(), 0, 'a drag onto another row opens no menu')
   assert.notDeepEqual(await titles(), order, 'a long press and drag still reorders')
   console.log('PASS long press + drag reorders')
   const moved = await titles()
-  await dragFrom(2, false)
+  await dragFrom(1, false)
   assert.ok(await page.locator('[role=menuitem]').count() > 0, 'a drag released in place opens the menu')
   assert.deepEqual(await titles(), moved, 'and does not reorder')
   console.log('PASS drag released in place opens the menu')
