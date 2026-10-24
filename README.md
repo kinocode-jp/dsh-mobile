@@ -42,6 +42,8 @@ On the phone, the DSH sidebar is hidden so the conversation gets the full width.
 
 When you add a workspace on the phone, the computer's folders are listed on the phone instead of opening a folder dialog on the computer. Browse to a folder or type its path, then tap **このフォルダを使う** ("Use this folder").
 
+Settings also close with a left-to-right swipe (on the tab strip, the swipe scrolls the tabs instead).
+
 A question from the AI keeps its options and the skip/send buttons on screen even when the question is long: the question text scrolls within about a quarter of the screen.
 
 The right sidebar (files, preview, changes review, browser, terminal) opens full screen on the phone. Buttons that open an app or Finder on the computer are hidden on the phone; the file preview offers **スマホに保存** ("Save to phone") instead, which saves to the phone's Downloads. If the page stays blank after DSH restarts, it reloads by itself.

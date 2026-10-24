@@ -120,3 +120,13 @@ test('opening a session does not bring the keyboard up; tapping the message box 
   assert.match(source, /if \(!field\.closest\("\[data-composer-card\]"\)[^\n]*\) return;\n\s*field\.blur\(\);/, 'only the message box loses the automatic focus')
   assert.match(source, /event\.target\.closest\("\[data-composer-card\]"\)\) composerFocusQuietUntil = 0;/, 'a tap on the message box ends the quiet period')
 })
+
+test('settings close with a left-to-right swipe, ahead of the app\'s own sidebar swipe', () => {
+  for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
+    assert.ok(source.includes(`window.addEventListener("${type}", onSheet`), `${type} is caught on window, before the app's document listener`)
+    assert.ok(source.includes(`window.removeEventListener("${type}", onSheet`), `${type} is removed with the phone layout`)
+  }
+  assert.match(source, /if \(scrollsSideways\(event\.target, sheet\)\) return;/, 'a touch on a sideways scroller (the tab strip) scrolls it instead')
+  assert.match(source, /if \(swipe\.dx < width \* 0\.3 && swipe\.v < 0\.5\) \{ springBack\(swipe\); return; \}/, 'a short, slow swipe springs back')
+  assert.match(source, /const close = swipe\.sheet\.querySelector\("\[class\*='_close'\]"\);/, 'closing presses DSH\'s own close button')
+})
